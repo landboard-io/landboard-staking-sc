@@ -15,7 +15,7 @@ elrond_wasm_node::wasm_endpoints! {
         getLockingTimestamp
         getMinStakeLimit
         getReward
-        getRewardPerToken
+        getRewardPerWei
         getRewardPerWeiStored
         getRewardRate
         getRewardTokenId
@@ -31,6 +31,8 @@ elrond_wasm_node::wasm_endpoints! {
         setState
         stake
         unstake
+        updateReward
+        withdraw
     )
 }
 

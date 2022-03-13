@@ -62,7 +62,7 @@ pub trait Staking:
         // update all factors
         self.update_reward(&caller);
 
-        self.total_supply().update(|v| *v += & stake_amount
+        self.total_supply().update(|v| *v += &stake_amount
         );
         self.balances(&caller).update(|v| *v += &stake_amount);
         self.last_stake_times(&caller).set(self.blockchain().get_block_timestamp());
@@ -139,12 +139,12 @@ pub trait Staking:
 
     /// view
 
-    #[view(getRewardPerToken)]
-    fn get_reward_per_token(&self) -> BigUint {
+    #[view(getRewardPerWei)]
+    fn get_reward_per_wei(&self) -> BigUint {
+        let reward_per_wei_stored = self.reward_per_wei_stored().get();
         return if self.total_supply().get() == BigUint::zero() {
-            BigUint::zero()
+            reward_per_wei_stored
         } else {
-            let reward_per_wei_stored = self.reward_per_wei_stored().get();
             let time_delta = BigUint::from(self.blockchain().get_block_timestamp() - self.last_update_time().get());
 
             reward_per_wei_stored + &time_delta * &self.reward_rate().get() / &self.total_supply().get()
@@ -153,15 +153,15 @@ pub trait Staking:
 
     #[view(getEarned)]
     fn get_earned(&self, user_address: &ManagedAddress) -> BigUint {
-        let reward_pert_token_delta = &self.get_reward_per_token() - &self.user_reward_per_wei_paid(user_address).get();
+        let reward_pert_token_delta = &self.get_reward_per_wei() - &self.user_reward_per_wei_paid(user_address).get();
         
         reward_pert_token_delta * &self.balances(user_address).get() + &self.rewards(user_address).get()
     }
 
     /// private
-    #[inline]
+    #[endpoint(updateReward)]
     fn update_reward(&self, user_address: &ManagedAddress) {
-        self.reward_per_wei_stored().set(&self.get_reward_per_token());
+        self.reward_per_wei_stored().set(&self.get_reward_per_wei());
         self.last_update_time().set(self.blockchain().get_block_timestamp());
         
         self.rewards(user_address).set(self.get_earned(user_address));
@@ -179,9 +179,31 @@ pub trait Staking:
     #[inline]
     fn require_check_locking(&self) {
         let caller = self.blockchain().get_caller();
+
         require!(
-            self.last_stake_times(&caller).get() + self.locking_timestamp().get() >= self.blockchain().get_block_timestamp(),
+            self.last_stake_times(&caller).get() + self.locking_timestamp().get() <= self.blockchain().get_block_timestamp(),
             "you cannot unstake or claim reward before locking_timestamp"
         );
+    }
+
+    /// endpoint - only_owner
+    
+    #[only_owner]
+    #[endpoint(withdraw)]
+    fn withdraw(&self,
+        #[var_args] opt_token_id: OptionalValue<TokenIdentifier>,
+        #[var_args] opt_token_amount: OptionalValue<BigUint>) {
+        // if token_id is not given, set it to eGLD
+        let token_id = match opt_token_id {
+            OptionalValue::Some(v) => v,
+            OptionalValue::None => TokenIdentifier::egld()
+        };
+        // if token_amount is not given, set it to balance of SC - max value to withdraw
+        let token_amount = match opt_token_amount {
+            OptionalValue::Some(v) => v,
+            OptionalValue::None => self.blockchain().get_sc_balance(&token_id, 0)
+        };
+
+        self.send().direct(&self.blockchain().get_caller(), &token_id, 0, &token_amount, &[]);
     }
 }

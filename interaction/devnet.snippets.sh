@@ -8,7 +8,7 @@ WALLET="./wallets/test-wallet.pem"
 TOKEN_ID="SVEN-4b35b0"
 TOKEN_ID_HEX="0x$(echo -n ${TOKEN_ID} | xxd -p -u | tr -d '\n')"
 
-REWARD_RATE=1000000000000000000             # 1 SVEN per second
+REWARD_RATE=100000000000000000000             # 100 SVEN per second
 MIN_STAKE_LIMIT=100000000000000000000       # 100 SVEN
 LOCKING_TIMESTAMP=10                        # 10 seconds
 
@@ -41,13 +41,54 @@ deploy() {
     erdpy data store --key=deployTransaction-devnet --value=${TRANSACTION}
 }
 
-### view
-getRewardPerToken() {
-    erdpy --verbose contract query ${ADDRESS} --proxy=${PROXY} --function="getRewardPerToken"
+unstake() {
+    erdpy --verbose contract call ${ADDRESS} \
+    --recall-nonce --pem=${WALLET} \
+    --gas-limit=6000000 \
+    --function="unstake" \
+    --send --proxy=${PROXY} --chain=${CHAIN_ID}
 }
 
-get_earned() {
-    erdpy --verbose contract query ${ADDRESS} --proxy=${PROXY} --function="getRewardPerToken" --arguments ${CALLER_ADDRESS_HEX}
+claimReward() {
+    erdpy --verbose contract call ${ADDRESS} \
+    --recall-nonce --pem=${WALLET} \
+    --gas-limit=6000000 \
+    --function="claimReward" \
+    --send --proxy=${PROXY} --chain=${CHAIN_ID}
+}
+
+updateReward() {
+    erdpy --verbose contract call ${ADDRESS} \
+    --recall-nonce --pem=${WALLET} \
+    --gas-limit=6000000 \
+    --function="updateReward" \
+    --argument ${CALLER_ADDRESS_HEX} \
+    --send --proxy=${PROXY} --chain=${CHAIN_ID}
+}
+
+withdraw() {
+    erdpy --verbose contract call ${ADDRESS} \
+    --recall-nonce --pem=${WALLET} \
+    --gas-limit=6000000 \
+    --function="withdraw" \
+    --send --proxy=${PROXY} --chain=${CHAIN_ID}
+}
+
+### view
+getRewardPerWei() {
+    erdpy --verbose contract query ${ADDRESS} --proxy=${PROXY} --function="getRewardPerWei"
+}
+
+getEarned() {
+    erdpy --verbose contract query ${ADDRESS} --proxy=${PROXY} --function="getEarned" --arguments ${CALLER_ADDRESS_HEX}
+}
+
+getState() {
+    erdpy --verbose contract query ${ADDRESS} --proxy=${PROXY} --function="getState"
+}
+
+getRewardRate() {
+    erdpy --verbose contract query ${ADDRESS} --proxy=${PROXY} --function="getRewardRate"
 }
 
 getTotalSupply() {
@@ -64,4 +105,8 @@ getReward() {
 
 getBalance() {
     erdpy --verbose contract query ${ADDRESS} --proxy=${PROXY} --function="getBalance" --arguments ${CALLER_ADDRESS_HEX}
+}
+
+getLastStakeTimes() {
+    erdpy --verbose contract query ${ADDRESS} --proxy=${PROXY} --function="getLastStakeTimes" --arguments ${CALLER_ADDRESS_HEX}
 }
