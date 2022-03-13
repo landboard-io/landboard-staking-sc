@@ -1,12 +1,21 @@
 #![no_std]
+#![feature(generic_associated_types)]
 
 elrond_wasm::imports!();
 elrond_wasm::derive_imports!();
 
-const EGLD_IN_WEI: u64 = 1_000_000_000_000_000_000u64;
+mod state;
+mod storage;
+
+use state::State;
 
 #[elrond_wasm::derive::contract]
-pub trait Staking {
+pub trait Staking:
+    storage::StorageModule
+{
+    /*
+        @param reward_rate: reward token amount created in every second
+     */
     #[init]
     fn init(&self, reward_token_id: TokenIdentifier, stake_token_id: TokenIdentifier, reward_rate: BigUint){
         require!(
@@ -24,64 +33,96 @@ pub trait Staking {
     }
 
     /// endpoint
-    // #[payable("*")]
-    // #[endpoint(stake)]
-    // fn stake(&self, #[payment_token] stake_token_id: TokenIdentifier, #[payment_amount] stake_amount: BigUint) {
-    //     require!(stake_token_id == self.stake_token_id().get(), "invalid stake_token_id");
+    #[payable("*")]
+    #[endpoint(stake)]
+    fn stake(&self, #[payment_token] stake_token_id: TokenIdentifier, #[payment_amount] stake_amount: BigUint) {
+        self.require_activation();
 
-    //     let caller = self.blockchain().get_caller();
+        require!(
+            stake_token_id == self.stake_token_id().get(),
+            "invalid stake_token_id"
+        );
+        require!(
+            stake_amount >= self.min_stake_limit().get(),
+            "cannot stake less than min_stake_limit"
+        );
 
-    //     // update all factors
-    //     self.update_reward(caller);
+        let caller = self.blockchain().get_caller();
 
-    //     self.total_supply().update(|v| *v += & stake_amount
-    //     );
-    //     self.balances(&caller).update(|v| *v += &stake_amount);
-    // }
+        // update all factors
+        self.update_reward(&caller);
 
-    // #[endpoint(unstake)]
-    // fn unstake(&self, #[var_args] opt_unstake_amount: OptionalValue<BigUint>) {
-    //     let caller = self.blockchain().get_caller();
+        self.total_supply().update(|v| *v += & stake_amount
+        );
+        self.balances(&caller).update(|v| *v += &stake_amount);
+    }
 
-    //     require!(self.balances(&caller).get() > BigUint::zero(), "zero balance");
+    #[endpoint(unstake)]
+    fn unstake(&self, #[var_args] opt_unstake_amount: OptionalValue<BigUint>) {
+        self.require_activation();
 
-    //     // update all factors
-    //     self.update_reward(caller);
+        let caller = self.blockchain().get_caller();
 
-    //     // if unstake_amount is not given, unstake all staked balance
-    //     let unstake_amount = match opt_unstake_amount {
-    //         OptionalValue::Some(v) => {
-    //             require!(self.balances(&caller).get() >= v, "unstake_amount cannot be greater than balance");
-    //             v
-    //         },
-    //         OptionalValue::None => self.balances(&caller).get()
-    //     };
+        require!(
+            self.balances(&caller).get() > BigUint::zero(),
+            "zero balance"
+        );
 
-    //     self.total_supply().update(|v| *v -= & unstake_amount
-    //     );
-    //     self.balances(&caller).update(|v| *v -= & unstake_amount
-    //     );
+        // update all factors
+        self.update_reward(&caller);
 
-    //     require!(self.blockchain().get_sc_balance(&self.stake_token_id().get(), 0) >= unstake_amount, "not enough staking tokens in smart contract");
+        // if unstake_amount is not given, unstake all staked balance
+        let unstake_amount = match opt_unstake_amount {
+            OptionalValue::Some(value) => {
+                require!(
+                    self.balances(&caller).get() >= value,
+                    "unstake_amount cannot be greater than balance"
+                );
+
+                value
+            },
+            OptionalValue::None => self.balances(&caller).get()
+        };
+
+        self.total_supply().update(|v| *v -= & unstake_amount
+        );
+        self.balances(&caller).update(|v| *v -= & unstake_amount
+        );
+
+        require!(
+            self.blockchain().get_sc_balance(&self.stake_token_id().get(), 0) >= unstake_amount,
+            "not enough staking tokens in smart contract"
+        );
         
-    //     self.send().direct(&caller, &self.stake_token_id().get(), 0, &unstake_amount, &[]);
-    // }
+        self.send().direct(&caller, &self.stake_token_id().get(), 0, &unstake_amount, &[]);
+    }
 
-    // #[endpoint(claimReward)]
-    // fn claim_reward(&self) {
-    //     let caller = self.blockchain().get_caller();
+    #[endpoint(claimReward)]
+    fn claim_reward(&self) {
+        self.require_activation();
 
-    //     // update all factors
-    //     self.update_reward(caller);
+        let caller = self.blockchain().get_caller();
 
-    //     let reward = self.rewards(&caller).get();
+        // update all factors
+        self.update_reward(&caller);
 
-    //     self.rewards(&caller).set(BigUint::zero());
+        let reward_amount = self.rewards(&caller).get();
 
-    //     require!(self.blockchain().get_sc_balance(&self.reward_token_id().get(), 0) >= reward, "not enough rewarding tokens in smart contract");
+        require!(
+            reward_amount > BigUint::zero(),
+            "nothing to claim"
+        );
+
+        self.rewards(&caller).update(|v| *v -= &reward_amount
+        );
+
+        require!(
+            self.blockchain().get_sc_balance(&self.reward_token_id().get(), 0) >= reward_amount,
+            "not enough rewarding tokens in smart contract"
+        );
         
-    //     self.send().direct(&caller, &self.reward_token_id().get(), 0, &reward, &[]);
-    // }
+        self.send().direct(&caller, &self.reward_token_id().get(), 0, &reward_amount, &[]);
+    }
 
     /// view
 
@@ -90,64 +131,35 @@ pub trait Staking {
         return if self.total_supply().get() == BigUint::zero() {
             BigUint::zero()
         } else {
-            let temp = &BigUint::from(self.blockchain().get_block_timestamp() - self.last_update_time().get()) * &self.reward_rate().get() * &BigUint::from(EGLD_IN_WEI);
-            &temp / &self.total_supply().get() + &self.reward_per_token_stored().get()
+            let reward_per_wei_stored = self.reward_per_wei_stored().get();
+            let time_delta = BigUint::from(self.blockchain().get_block_timestamp() - self.last_update_time().get());
+
+            reward_per_wei_stored + &time_delta * &self.reward_rate().get() / &self.total_supply().get()
         }
     }
 
     #[view(getEarned)]
     fn get_earned(&self, user_address: &ManagedAddress) -> BigUint {
-        let temp = self.balances(user_address).get() * (&self.get_reward_per_token() - &self.user_reward_per_token_paid(user_address).get());
-        &temp / &BigUint::from(EGLD_IN_WEI) +
-        &self.rewards(user_address).get()
+        let reward_pert_token_delta = &self.get_reward_per_token() - &self.user_reward_per_wei_paid(user_address).get();
+        
+        reward_pert_token_delta * &self.balances(user_address).get() + &self.rewards(user_address).get()
     }
 
     /// private
+    #[inline]
     fn update_reward(&self, user_address: &ManagedAddress) {
-        self.reward_per_token_stored().set(&self.get_reward_per_token());
+        self.reward_per_wei_stored().set(&self.get_reward_per_token());
         self.last_update_time().set(self.blockchain().get_block_timestamp());
         
         self.rewards(user_address).set(self.get_earned(user_address));
-        self.user_reward_per_token_paid(user_address).set(&self.reward_per_token_stored().get());
+        self.user_reward_per_wei_paid(user_address).set(&self.reward_per_wei_stored().get());
     }
 
-    /// storage
-
-    #[view(getRewardTokenId)]
-    #[storage_mapper("reward_token_id")]
-    fn reward_token_id(&self) -> SingleValueMapper<TokenIdentifier>;
-
-    #[view(getStakingTokenId)]
-    #[storage_mapper("stake_token_id")]
-    fn stake_token_id(&self) -> SingleValueMapper<TokenIdentifier>;
-
-    #[view(getRewardRate)]
-    #[storage_mapper("reward_rate")]
-    fn reward_rate(&self) -> SingleValueMapper<BigUint>;
-
-    #[view(getLastUpdateTime)]
-    #[storage_mapper("last_update_time")]
-    fn last_update_time(&self) -> SingleValueMapper<u64>;
-
-    #[view(getRewardPerTokenStored)]
-    #[storage_mapper("reward_per_token_stored")]
-    fn reward_per_token_stored(&self) -> SingleValueMapper<BigUint>;
-
-    //
-
-    #[view(getUserRewardPerTokenPaid)]
-    #[storage_mapper("user_reward_per_token_paid")]
-    fn user_reward_per_token_paid(&self, user_address: &ManagedAddress) -> SingleValueMapper<BigUint>;
-
-    #[view(getReward)]
-    #[storage_mapper("rewards")]
-    fn rewards(&self, user_address: &ManagedAddress) -> SingleValueMapper<BigUint>;
-
-    #[view(getTotalSupply)]
-    #[storage_mapper("total_supply")]
-    fn total_supply(&self) -> SingleValueMapper<BigUint>;
-
-    #[view(getBalance)]
-    #[storage_mapper("balances")]
-    fn balances(&self, user_address: &ManagedAddress) -> SingleValueMapper<BigUint>;
+    #[inline]
+    fn require_activation(&self) {
+        require!(
+            self.state().get() == State::Live,
+            "staking is not live"
+        );
+    }
 }

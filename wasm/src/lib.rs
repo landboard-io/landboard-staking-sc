@@ -7,17 +7,30 @@
 elrond_wasm_node::wasm_endpoints! {
     simple_staking
     (
+        claimReward
         getBalance
         getEarned
+        getLastStakeTimes
         getLastUpdateTime
+        getLockingTimestamp
+        getMinStakeLimit
         getReward
         getRewardPerToken
-        getRewardPerTokenStored
+        getRewardPerWeiStored
         getRewardRate
         getRewardTokenId
         getStakingTokenId
+        getState
         getTotalSupply
-        getUserRewardPerTokenPaid
+        getUserRewardPerWeiPaid
+        setLockingTimestamp
+        setMinStakeLimit
+        setRewardRate
+        setRewardTokenId
+        setStakeTokenId
+        setState
+        stake
+        unstake
     )
 }
 
