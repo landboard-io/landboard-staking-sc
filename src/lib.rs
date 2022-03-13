@@ -17,7 +17,13 @@ pub trait Staking:
         @param reward_rate: reward token amount created in every second
      */
     #[init]
-    fn init(&self, reward_token_id: TokenIdentifier, stake_token_id: TokenIdentifier, reward_rate: BigUint){
+    fn init(&self,
+        reward_token_id: TokenIdentifier,
+        stake_token_id: TokenIdentifier,
+        reward_rate: BigUint,
+        min_stake_limit: BigUint,
+        locking_timestamp: u64
+    ){
         require!(
             reward_token_id.is_valid_esdt_identifier(),
             "invalid reward_token_id"
@@ -30,6 +36,10 @@ pub trait Staking:
         self.reward_token_id().set(&reward_token_id);
         self.stake_token_id().set(&stake_token_id);
         self.reward_rate().set(&reward_rate);
+
+        self.min_stake_limit().set(&min_stake_limit);
+        self.locking_timestamp().set(locking_timestamp);
+        self.state().set(State::Live);
     }
 
     /// endpoint
@@ -55,11 +65,13 @@ pub trait Staking:
         self.total_supply().update(|v| *v += & stake_amount
         );
         self.balances(&caller).update(|v| *v += &stake_amount);
+        self.last_stake_times(&caller).set(self.blockchain().get_block_timestamp());
     }
 
     #[endpoint(unstake)]
     fn unstake(&self, #[var_args] opt_unstake_amount: OptionalValue<BigUint>) {
         self.require_activation();
+        self.require_check_locking();
 
         let caller = self.blockchain().get_caller();
 
@@ -100,6 +112,7 @@ pub trait Staking:
     #[endpoint(claimReward)]
     fn claim_reward(&self) {
         self.require_activation();
+        self.require_check_locking();
 
         let caller = self.blockchain().get_caller();
 
@@ -160,6 +173,15 @@ pub trait Staking:
         require!(
             self.state().get() == State::Live,
             "staking is not live"
+        );
+    }
+
+    #[inline]
+    fn require_check_locking(&self) {
+        let caller = self.blockchain().get_caller();
+        require!(
+            self.last_stake_times(&caller).get() + self.locking_timestamp().get() >= self.blockchain().get_block_timestamp(),
+            "you cannot unstake or claim reward before locking_timestamp"
         );
     }
 }
