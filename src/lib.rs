@@ -4,10 +4,8 @@
 elrond_wasm::imports!();
 elrond_wasm::derive_imports!();
 
-mod state;
-mod storage;
 
-use state::State;
+mod storage;
 
 #[elrond_wasm::derive::contract]
 pub trait Staking:
@@ -39,7 +37,7 @@ pub trait Staking:
 
         self.min_stake_limit().set(&min_stake_limit);
         self.locking_timestamp().set(locking_timestamp);
-        self.state().set(State::Live);
+        self.paused().set(0u32);    // live
     }
 
     /// endpoint
@@ -159,7 +157,7 @@ pub trait Staking:
     }
 
     /// private
-    #[endpoint(updateReward)]
+    #[inline]
     fn update_reward(&self, user_address: &ManagedAddress) {
         self.reward_per_wei_stored().set(&self.get_reward_per_wei());
         self.last_update_time().set(self.blockchain().get_block_timestamp());
@@ -171,7 +169,7 @@ pub trait Staking:
     #[inline]
     fn require_activation(&self) {
         require!(
-            self.state().get() == State::Live,
+            self.paused().get() == 0u32,
             "staking is not live"
         );
     }

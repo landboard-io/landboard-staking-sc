@@ -11,6 +11,7 @@ TOKEN_ID_HEX="0x$(echo -n ${TOKEN_ID} | xxd -p -u | tr -d '\n')"
 REWARD_RATE=100000000000000000000             # 100 SVEN per second
 MIN_STAKE_LIMIT=100000000000000000000       # 100 SVEN
 LOCKING_TIMESTAMP=10                        # 10 seconds
+PAUSED=1
 
 CALLER_ADDRESS="erd1dl8ucerztz80eqtvs2u35vj5pckle3h3mnuce5fctyzxp4d74dfqwy7ntn"
 CALLER_ADDRESS_HEX="0x$(erdpy wallet bech32 --decode ${CALLER_ADDRESS})"
@@ -57,12 +58,21 @@ claimReward() {
     --send --proxy=${PROXY} --chain=${CHAIN_ID}
 }
 
-updateReward() {
+setLive() {
     erdpy --verbose contract call ${ADDRESS} \
     --recall-nonce --pem=${WALLET} \
     --gas-limit=6000000 \
-    --function="updateReward" \
-    --argument ${CALLER_ADDRESS_HEX} \
+    --function="setPaused" \
+    --arguments 0 \
+    --send --proxy=${PROXY} --chain=${CHAIN_ID}
+}
+
+setPaused() {
+    erdpy --verbose contract call ${ADDRESS} \
+    --recall-nonce --pem=${WALLET} \
+    --gas-limit=6000000 \
+    --function="setPaused" \
+    --arguments 1 \
     --send --proxy=${PROXY} --chain=${CHAIN_ID}
 }
 
@@ -83,8 +93,8 @@ getEarned() {
     erdpy --verbose contract query ${ADDRESS} --proxy=${PROXY} --function="getEarned" --arguments ${CALLER_ADDRESS_HEX}
 }
 
-getState() {
-    erdpy --verbose contract query ${ADDRESS} --proxy=${PROXY} --function="getState"
+getPaused() {
+    erdpy --verbose contract query ${ADDRESS} --proxy=${PROXY} --function="getPaused"
 }
 
 getRewardRate() {

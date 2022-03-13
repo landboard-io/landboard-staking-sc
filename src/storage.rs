@@ -1,7 +1,6 @@
 elrond_wasm::imports!();
 elrond_wasm::derive_imports!();
 
-use crate::state::State;
 
 #[elrond_wasm::module]
 pub trait StorageModule {
@@ -48,9 +47,9 @@ pub trait StorageModule {
     }
 
     #[only_owner]
-    #[endpoint(setState)]
-    fn set_state(&self, state: State) {
-        self.state().set(state);
+    #[endpoint(setPaused)]
+    fn set_paused(&self, paused: u32) {
+        self.paused().set(paused);
     }
 
     /// storage
@@ -86,9 +85,9 @@ pub trait StorageModule {
     #[storage_mapper("locking_timestamp")]
     fn locking_timestamp(&self) -> SingleValueMapper<u64>;
 
-    #[view(getState)]
-    #[storage_mapper("state")]
-    fn state(&self) -> SingleValueMapper<State>;
+    #[view(getPaused)]
+    #[storage_mapper("paused")]
+    fn paused(&self) -> SingleValueMapper<u32>;
 
     // stats
 

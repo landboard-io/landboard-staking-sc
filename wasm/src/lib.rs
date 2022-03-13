@@ -14,24 +14,23 @@ elrond_wasm_node::wasm_endpoints! {
         getLastUpdateTime
         getLockingTimestamp
         getMinStakeLimit
+        getPaused
         getReward
         getRewardPerWei
         getRewardPerWeiStored
         getRewardRate
         getRewardTokenId
         getStakingTokenId
-        getState
         getTotalSupply
         getUserRewardPerWeiPaid
         setLockingTimestamp
         setMinStakeLimit
+        setPaused
         setRewardRate
         setRewardTokenId
         setStakeTokenId
-        setState
         stake
         unstake
-        updateReward
         withdraw
     )
 }
